@@ -5,14 +5,31 @@ import { z } from "zod";
 
 const storedTask = z.looseObject({ id: z.string(), title: z.string(), done: z.boolean() });
 const taskList = z.array(storedTask);
-type Task = z.infer<typeof storedTask>;
-type TaskChanges = Partial<Pick<Task, "title" | "done">>;
+export type Task = z.infer<typeof storedTask>;
+
+export type TaskPriority = "高" | "中" | "低";
+export type TaskSize = "小" | "中" | "大";
+
+// 可选字段。磁盘上的任务仍然按宽松对象解析，旧数据里已有的其他字段会原样保留。
+export interface TaskDetails {
+  dueAt?: string | null;
+  priority?: TaskPriority | null;
+  size?: TaskSize | null;
+}
+
+type TaskChanges = Partial<Pick<Task, "title" | "done">> & TaskDetails;
 
 export interface TaskStore {
   list(): Task[];
-  create(title: string): Task;
+  create(title: string, details?: TaskDetails): Task;
   update(id: string, changes: TaskChanges): Task | undefined;
   remove(id: string): boolean;
+}
+
+// 只保留真正给出的字段：undefined 表示「这次不改」，null 表示「清空」。
+function given<T extends object>(value: T): Partial<T> {
+  const entries = Object.entries(value).filter(([, item]) => item !== undefined);
+  return Object.fromEntries(entries) as Partial<T>;
 }
 
 export function createJsonTaskStore(filename: string): TaskStore {
@@ -32,8 +49,8 @@ export function createJsonTaskStore(filename: string): TaskStore {
   return {
     list,
 
-    create(title) {
-      const task = { id: randomUUID(), title, done: false };
+    create(title, details = {}) {
+      const task = { id: randomUUID(), title, done: false, ...given(details) };
       save([...list(), task]);
       return task;
     },
@@ -43,7 +60,7 @@ export function createJsonTaskStore(filename: string): TaskStore {
       const task = tasks.find((item) => item.id === id);
       if (!task) return undefined;
 
-      Object.assign(task, changes);
+      Object.assign(task, given(changes));
       save(tasks);
       return task;
     },
