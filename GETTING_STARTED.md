@@ -25,7 +25,8 @@ npm run dev
 | -------------------------------------------- | ------------------------------------------ |
 | [src/App.tsx](src/App.tsx)                   | 聊天界面，发送当前页面的对话历史并显示回复 |
 | [server/index.ts](server/index.ts)           | 接入智能体与任务存储，启动服务             |
-| [server/agent.ts](server/agent.ts)           | 候选人实现入口，接收消息数组，返回回复文本 |
+| [server/agent.ts](server/agent.ts)           | 候选人实现入口：系统提示、工具调用循环     |
+| [server/tools.ts](server/tools.ts)           | 工具定义、任务引用解析和清单排版           |
 | [server/model.ts](server/model.ts)           | 服务端 DeepSeek 客户端与模型配置           |
 | [server/tasks.ts](server/tasks.ts)           | 任务 API 的输入校验和 HTTP 响应            |
 | [server/app.ts](server/app.ts)               | 接收对话历史，调用智能体并挂载任务 API     |
