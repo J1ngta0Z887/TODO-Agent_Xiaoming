@@ -96,3 +96,67 @@ test("聊天 API 只将有效的完整对话传给智能体，并返回其回复
   assert.equal(invalid.status, 400);
   assert.deepEqual(conversations, [messages]);
 });
+
+test("任务真的写进了磁盘", async (t) => {
+  const { request, filename } = await startTestApp(t);
+  const created = await request("POST", "/api/tasks", { title: "买牛奶" });
+  assert.equal(created.status, 201);
+
+  const onDisk = createJsonTaskStore(filename).list();
+  assert.equal(onDisk.length, 1);
+  assert.equal(onDisk[0]?.title, "买牛奶");
+});
+
+test("不存在的接口返回 404", async (t) => {
+  const { request } = await startTestApp(t);
+  const response = await request("GET", "/api/nope");
+  assert.equal(response.status, 404);
+  assert.deepEqual(response.body, { error: "接口不存在。" });
+});
+
+test("标题超过 200 字、PATCH 空对象、删不存在的任务都被拒绝", async (t) => {
+  const { request } = await startTestApp(t);
+
+  assert.equal((await request("POST", "/api/tasks", { title: "字".repeat(201) })).status, 400);
+  assert.equal((await request("POST", "/api/tasks", { title: "买牛奶" })).status, 201);
+  assert.equal((await request("PATCH", "/api/tasks/missing", { done: true })).status, 404);
+  assert.equal((await request("DELETE", "/api/tasks/missing")).status, 404);
+
+  const empty = await request("PATCH", "/api/tasks/missing", {});
+  assert.equal(empty.status, 400, "空改动应当先被 400 拦下，而不是走到 404");
+});
+
+test("聊天接口拒绝空消息和以小明结尾的对话", async (t) => {
+  const { request } = await startTestApp(t);
+  assert.equal((await request("POST", "/api/chat", { messages: [] })).status, 400);
+  assert.equal(
+    (await request("POST", "/api/chat", { messages: [{ role: "assistant", content: "你好" }] }))
+      .status,
+    400,
+  );
+  assert.equal(
+    (await request("POST", "/api/chat", { messages: [{ role: "user", content: "  " }] })).status,
+    400,
+  );
+});
+
+test("请求体不是合法 JSON 时返回 400，而不是崩掉", async (t) => {
+  const app = createApp({
+    tasks: createJsonTaskStore(join(tmpdir(), `bad-json-${Date.now()}`, "tasks.json")),
+    async reply() {
+      return "收到";
+    },
+  });
+  const server = app.listen(0, "127.0.0.1");
+  t.after(() => server[Symbol.asyncDispose]());
+  await once(server, "listening");
+  const { port } = server.address() as AddressInfo;
+
+  const response = await fetch(`http://127.0.0.1:${port}/api/tasks`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: "{ 这不是 JSON",
+  });
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), { error: "请求需要使用有效的 JSON。" });
+});

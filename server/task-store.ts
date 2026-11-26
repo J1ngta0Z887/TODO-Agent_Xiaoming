@@ -35,7 +35,22 @@ function given<T extends object>(value: T): Partial<T> {
 export function createJsonTaskStore(filename: string): TaskStore {
   function list(): Task[] {
     if (!existsSync(filename)) return [];
-    return taskList.parse(JSON.parse(readFileSync(filename, "utf8")));
+    const raw = readFileSync(filename, "utf8");
+    try {
+      return taskList.parse(JSON.parse(raw));
+    } catch (error) {
+      // 文件坏了（手改过、磁盘写坏）不能让整个服务跟着瘫掉：先留一份原始内容，
+      // 再从空清单继续。备份失败也照样往下走，不然读一次就抛一次。
+      let backup = "（备份失败）";
+      try {
+        backup = `${filename}.corrupt-${Date.now()}`;
+        renameSync(filename, backup);
+      } catch {
+        backup = "（备份失败）";
+      }
+      console.error(`任务清单读不出来，已备份到 ${backup}：`, error);
+      return [];
+    }
   }
 
   // 同一服务进程内同步完成读写；替换文件前，原清单始终完整可读。
